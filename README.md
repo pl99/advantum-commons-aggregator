@@ -137,9 +137,7 @@ data_aggregator_library/
 │   │                     ├── AggregationTask.java
 │   │                     ├── Aggregator.java
 │   │                     └── collectors/
-│   │                         ├── CompositeCollector.java
 │   │                         ├── MedianCollector.java
-│   │                         └── TeeingCollector.java
 │   └── test/
 │       └── java/
 │           └── ru/
