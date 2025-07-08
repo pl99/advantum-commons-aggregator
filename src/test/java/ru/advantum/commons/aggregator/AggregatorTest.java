@@ -36,11 +36,12 @@ class AggregatorTest {
                 .aggregate();
 
         assertEquals(0L, result.getCount("count"));
+        assertEquals(0, result.getSum("sumAge", Integer.class));
         assertEquals(BigDecimal.ZERO, result.getSum("sum"));
         assertEquals(Collections.emptySet(), result.getDistinct("distinct"));
-        assertNull(result.get("min"), "Min should be null for empty collection");
-        assertNull(result.get("max"), "Max should be null for empty collection");
-        assertNull(result.get("median"), "Median should be null for empty collection");
+        assertNull(result.getMin("min"), "Min should be null for empty collection");
+        assertNull(result.getMax("max"), "Max should be null for empty collection");
+        assertNull(result.getMedian("median"), "Median should be null for empty collection");
     }
 
     @Test
@@ -49,6 +50,7 @@ class AggregatorTest {
                 .count("count")
                 .distinct("distinctAges", TestEmployee::getAge)
                 .sum("sum", TestEmployee::getSalary)
+                .sum("sumAge", TestEmployee::getAge)
                 .average("avgAge", TestEmployee::getAge)
                 .min("minSalary", TestEmployee::getSalary)
                 .max("maxAge", TestEmployee::getAge)
@@ -59,6 +61,8 @@ class AggregatorTest {
         assertEquals(5L, result.getCount("count"));
         assertEquals(Set.of(20, 30, 40, 50), result.getDistinct("distinctAges"));
         assertEquals(new BigDecimal("1500.00"), result.getSum("sum"));
+        assertEquals(new BigDecimal("160"), result.getSum("sumAge"));
+        assertEquals(160, result.getSum("sumAge", Integer.class));
         assertEquals(32.0, result.getAverage("avgAge"));
         assertEquals(new BigDecimal("100.00"), result.getMin("minSalary"));
         assertEquals("50", result.getMax("maxAge").toString());

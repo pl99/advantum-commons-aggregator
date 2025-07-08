@@ -44,12 +44,36 @@ public final class AggregationResult {
      * @return Результат агрегации или null, если ключ не найден.
      */
     @SuppressWarnings("unchecked")
-    public <T> T get(String key) {
+    <T> T get(String key) {
         return (T) results.get(key);
     }
 
     public BigDecimal getSum(String key) {
-        return get(key);
+        BigDecimal bigDecimal = get(key);
+        if (bigDecimal==null) return BigDecimal.ZERO;
+        return bigDecimal;
+    }
+    public <T extends Number> T getSum(String key, Class<T> targetType) {
+        BigDecimal sum = getSum(key);
+        if (targetType == Integer.class) {
+            return targetType.cast(sum.intValue());
+        } else if (targetType == Long.class) {
+            return targetType.cast(sum.longValue());
+        } else if (targetType == Double.class) {
+            return targetType.cast(sum.doubleValue());
+        } else if (targetType == Float.class) {
+            return targetType.cast(sum.floatValue());
+        } else if (targetType == Short.class) {
+            return targetType.cast(sum.shortValue());
+        } else if (targetType == Byte.class) {
+            return targetType.cast(sum.byteValue());
+        } else if (targetType == BigDecimal.class) {
+            return targetType.cast(sum);
+        } else if (targetType == java.math.BigInteger.class) {
+            return targetType.cast(sum.toBigInteger());
+        }
+        // Добавьте обработку других типов Number (Atomic...), если необходимо
+        throw new IllegalArgumentException("Unsupported Number type: " + targetType.getName());
     }
 
     public Double getAverage(String key) {
