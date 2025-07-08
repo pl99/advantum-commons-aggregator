@@ -25,7 +25,7 @@
 1.  Клонируйте репозиторий:
 
     ```bash
-    git clone <URL_репозитория>
+    git clone https://github.com/pl99/advantum-commons-aggregator
     cd advantum-commons-aggregator
     ```
 
