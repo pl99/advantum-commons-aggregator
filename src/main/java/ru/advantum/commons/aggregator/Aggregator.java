@@ -18,13 +18,15 @@ import java.util.stream.Stream;
  *
  * @param <T> Тип объектов в коллекции.
  */
-public class Aggregator<T> {
+//public class Aggregator<T> {
+public final class Aggregator<T> extends AbstractAggregator<T, AggregationResult> {
 
     private final Collection<T> collection;
     private final boolean parallel;
     private final List<AggregationTask<T>> tasks;
 
     public Aggregator(Collection<T> collection, boolean parallel, List<AggregationTask<T>> tasks) {
+        super(collection);
         this.collection = collection;
         this.parallel = parallel;
         this.tasks = tasks;
@@ -199,6 +201,18 @@ public class Aggregator<T> {
 
         Stream<T> stream = parallel ? collection.parallelStream() : collection.stream();
         return stream.collect(finalCollector);
+    }
+    @SafeVarargs
+    public static <T> GroupingAggregator<T, List<Object>> groupBy(Collection<T> collection, Function<? super T, ?>... classifiers) {
+        Function<T, List<Object>> compositeClassifier = t ->
+                Arrays.stream(classifiers)
+                        .map(c -> c.apply(t))
+                        .collect(Collectors.toList());
+        return new GroupingAggregator<>(collection, compositeClassifier, false, List.of());
+    }
+    @Override
+    protected AbstractAggregator<T, AggregationResult> newInstance(Collection<T> collection, boolean parallel, List<AggregationTask<T>> aggregationTasks) {
+        return new Aggregator<>(collection, parallel, tasks);
     }
 
 }

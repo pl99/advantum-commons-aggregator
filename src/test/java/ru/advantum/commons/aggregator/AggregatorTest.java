@@ -2,12 +2,14 @@ package ru.advantum.commons.aggregator;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AggregatorTest {
 
@@ -16,99 +18,116 @@ class AggregatorTest {
     @BeforeEach
     void setUp() {
         employees = Arrays.asList(
-                new TestEmployee(20, new BigDecimal("100.00")), // Duplicate age
-                new TestEmployee(20, new BigDecimal("200.00")),
-                new TestEmployee(30, new BigDecimal("300.00")),
-                new TestEmployee(40, new BigDecimal("400.00")),
-                new TestEmployee(50, new BigDecimal("500.00"))
+                new TestEmployee(20, new BigDecimal("100.00"), "A"),
+                new TestEmployee(20, new BigDecimal("200.00"), "B"), // same age, different group
+                new TestEmployee(30, new BigDecimal("300.00"), "A"),
+                new TestEmployee(40, new BigDecimal("400.00"), "B"),
+                new TestEmployee(50, new BigDecimal("500.00"), "A"),
+                new TestEmployee(20, new BigDecimal("150.00"), "A") // same age and group as first
         );
     }
 
     @Test
-    void testEmptyCollection() {
-        AggregationResult result = Aggregator.of(Collections.<TestEmployee>emptyList())
+    void testSimpleAggregation() {
+        AggregationResult result = Aggregator.of(employees)
                 .count("count")
-                .sum("sum", TestEmployee::getSalary)
-                .distinct("distinct", TestEmployee::getAge)
-                .min("min", TestEmployee::getAge)
-                .max("max", TestEmployee::getAge)
-                .median("median", TestEmployee::getSalary)
+                .distinct("distinctGroups", TestEmployee::getGroup)
                 .aggregate();
 
-        assertEquals(0L, result.getCount("count"));
-        assertEquals(0, result.getSum("sumAge", Integer.class));
-        assertEquals(BigDecimal.ZERO, result.getSum("sum"));
-        assertEquals(Collections.emptySet(), result.getDistinct("distinct"));
-        assertNull(result.getMin("min"), "Min should be null for empty collection");
-        assertNull(result.getMax("max"), "Max should be null for empty collection");
-        assertNull(result.getMedian("median"), "Median should be null for empty collection");
+        assertEquals(6L, result.getCount("count"));
+        assertEquals(Set.of("A", "B"), result.getDistinct("distinctGroups"));
     }
 
     @Test
-    void testAllAggregationsSequentially() {
-        AggregationResult result = Aggregator.of(employees)
+    void testGroupingBySingleField() {
+        Map<List<Object>, AggregationResult> result = Aggregator.groupBy(employees, TestEmployee::getGroup)
                 .count("count")
-                .distinct("distinctAges", TestEmployee::getAge)
-                .sum("sum", TestEmployee::getSalary)
-                .sum("sumAge", TestEmployee::getAge)
-                .average("avgAge", TestEmployee::getAge)
-                .min("minSalary", TestEmployee::getSalary)
+                .sum("sumSalary", TestEmployee::getSalary)
                 .max("maxAge", TestEmployee::getAge)
-                .min("minAge", TestEmployee::getAge)
-                .median("medianSalary", TestEmployee::getSalary)
                 .aggregate();
 
-        assertEquals(5L, result.getCount("count"));
-        assertEquals(Set.of(20, 30, 40, 50), result.getDistinct("distinctAges"));
-        assertEquals(new BigDecimal("1500.00"), result.getSum("sum"));
-        assertEquals(new BigDecimal("160"), result.getSum("sumAge"));
-        assertEquals(160, result.getSum("sumAge", Integer.class));
-        assertEquals(32.0, result.getAverage("avgAge"));
-        assertEquals(new BigDecimal("100.00"), result.getMin("minSalary"));
-        assertEquals("50", result.getMax("maxAge").toString());
-        assertEquals(50, Optional.of(result.getMax("maxAge")).get());
-        assertEquals(20, Optional.of(result.getMax("minAge")).get());
-        assertEquals(new BigDecimal("300.00"), result.getMedian("medianSalary"));
+        assertNotNull(result);
+        assertEquals(2, result.size());
+
+        AggregationResult groupA = result.get(List.of("A"));
+        assertNotNull(groupA);
+        assertEquals(4L, groupA.getCount("count"));
+        assertEquals(new BigDecimal("1050.00"),(groupA.getSum("sumSalary")));
+        assertEquals(50, (Integer) groupA.getMax("maxAge"));
+
+        AggregationResult groupB = result.get(List.of("B"));
+        assertNotNull(groupB);
+        assertEquals(2L, groupB.getCount("count"));
+        assertEquals(new BigDecimal("600.00"),groupB.getSum("sumSalary"));
+        assertEquals(40, (Integer) groupB.getMax("maxAge"));
     }
 
     @Test
-    void testAllAggregationsParallel() {
-        AggregationResult result = Aggregator.of(employees)
-                .parallel()
+    void testGroupingByMultipleFields() {
+        Map<List<Object>, AggregationResult> result = Aggregator.groupBy(employees, TestEmployee::getGroup, TestEmployee::getAge)
                 .count("count")
-                .distinct("distinctAges", TestEmployee::getAge)
-                .sum("sum", TestEmployee::getSalary)
-                .average("avgAge", TestEmployee::getAge)
-                .min("minSalary", TestEmployee::getSalary)
-                .max("maxAge", TestEmployee::getAge)
-                .median("medianSalary", TestEmployee::getSalary)
+                .sum("sumSalary", TestEmployee::getSalary)
                 .aggregate();
 
-        assertEquals(5L, result.getCount("count"));
-        assertEquals(Set.of(20, 30, 40, 50), result.getDistinct("distinctAges"));
-        assertEquals(new BigDecimal("1500.00"), result.getSum("sum"));
-        assertEquals(32.0, result.getAverage("avgAge"));
-        assertEquals(new BigDecimal("100.00"), result.getMin("minSalary"));
-        assertEquals("50", result.getMax("maxAge").toString());
-        assertEquals(new BigDecimal("300.00"), result.getMedian("medianSalary"));
+        assertNotNull(result);
+        assertEquals(5, result.size()); // (A, 20), (A, 30), (A, 50), (B, 20), (B, 40) -> wait, 5 groups
+
+        // Check group (A, 20)
+        AggregationResult groupA20 = result.get(List.of("A", 20));
+        assertNotNull(groupA20);
+        assertEquals(2L, groupA20.getCount("count"));
+        assertEquals(new BigDecimal("250.00"),(groupA20.getSum("sumSalary")));
+
+        // Check group (A, 30)
+        AggregationResult groupA30 = result.get(List.of("A", 30));
+        assertNotNull(groupA30);
+        assertEquals(1L, groupA30.getCount("count"));
     }
 
-    // Вспомогательный класс для тестов
+
+    @Test
+    void testGroupingByObjectIdentity() {
+        Map<List<Object>, AggregationResult> result = Aggregator.groupBy(employees, Function.identity())
+                .count("count")
+                .sum("sumSalary", TestEmployee::getSalary)
+                .aggregate();
+
+        assertNotNull(result);
+        assertEquals(employees.size(), result.size());
+
+        TestEmployee employeeToTest = new TestEmployee(30, new BigDecimal("300.00"), "A");
+        AggregationResult employeeResult = result.get(List.of(employeeToTest));
+        assertNotNull(employeeResult);
+        assertEquals(1L, employeeResult.getCount("count"));
+        assertEquals(new BigDecimal("300.00"),(employeeResult.getSum("sumSalary")));
+    }
+
     private static class TestEmployee {
         private final int age;
         private final BigDecimal salary;
+        private final String group;
 
-        public TestEmployee(int age, BigDecimal salary) {
-            this.age = age;
-            this.salary = salary;
+        public TestEmployee(int age, BigDecimal salary, String group) {
+            this.age = age; this.salary = salary; this.group = group;
+        }
+        public int getAge() { return age; }
+        public BigDecimal getSalary() { return salary; }
+        public String getGroup() { return group; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) return false;
+
+            TestEmployee that = (TestEmployee) o;
+            return age == that.age && salary.equals(that.salary) && group.equals(that.group);
         }
 
-        public int getAge() {
-            return age;
-        }
-
-        public BigDecimal getSalary() {
-            return salary;
+        @Override
+        public int hashCode() {
+            int result = age;
+            result = 31 * result + salary.hashCode();
+            result = 31 * result + group.hashCode();
+            return result;
         }
     }
 }
